@@ -107,7 +107,15 @@ GEMINI_API_KEY_PORTFOLIO=AIza...
    - `Portfolio.csv` - Current holdings (from Portfolio page)
    - `Transactions.csv` - All buy/sell transactions
 
-> 💡 **Tip**: Make sure to download in **Italian** locale format, or check the `samples/` folder for expected column headers.
+> 💡 **Tip**: Make sure to download in **Italian** or **English** format, or check the `samples/` folder for expected column headers. 
+>
+> **If you want to change the language of your trading platform**, perform the following steps outlined in the procedures below.
+>
+> **If you're using your computer:**
+>
+> 1. Go to your profile by hovering over the profile icon.
+> 2. Click on personal settings
+> 3. Select the language of your choice. Please note that you can only switch between the default account language and English
 
 ---
 
@@ -129,15 +137,15 @@ The app supports DEGIRO CSV exports in **both English and Italian**. It auto-det
 
 ### Account.csv
 
-| Column      | Description         | Example           |
-| ----------- | ------------------- | ----------------- |
-| Date        | Date (DD-MM-YYYY)   | 15-12-2025        |
-| Time        | Time                | 09:30             |
-| Product     | Product name        | APPLE INC         |
-| ISIN        | Security identifier | US0378331005      |
-| Description | Transaction type    | Dividend          |
-| Change      | Amount change       | 2,40              |
-| Balance     | Balance             | 150,00            |
+| Column      | Description         | Example      |
+| ----------- | ------------------- | ------------ |
+| Date        | Date (DD-MM-YYYY)   | 15-12-2025   |
+| Time        | Time                | 09:30        |
+| Product     | Product name        | APPLE INC    |
+| ISIN        | Security identifier | US0378331005 |
+| Description | Transaction type    | Dividend     |
+| Change      | Amount change       | 2,40         |
+| Balance     | Balance             | 150,00       |
 
 ### Portfolio.csv
 
@@ -151,17 +159,16 @@ The app supports DEGIRO CSV exports in **both English and Italian**. It auto-det
 
 ### Transactions.csv
 
-| Column     | Description         | Example      |
-| ---------- | ------------------- | ------------ |
-| Date       | Date                | 15-12-2025   |
-| Product    | Product name        | APPLE INC    |
-| ISIN       | Security identifier | US0378331005 |
-| Quantity   | Quantity            | 10           |
-| Price      | Price per share     | 190,00       |
-| Total EUR  | Total in EUR        | -1774,00     |
+| Column    | Description         | Example      |
+| --------- | ------------------- | ------------ |
+| Date      | Date                | 15-12-2025   |
+| Product   | Product name        | APPLE INC    |
+| ISIN      | Security identifier | US0378331005 |
+| Quantity  | Quantity            | 10           |
+| Price     | Price per share     | 190,00       |
+| Total EUR | Total in EUR        | -1774,00     |
 
 > 📂 Sample files are available in the `samples/` folder!
-
 
 ---
 
