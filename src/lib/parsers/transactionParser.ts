@@ -3,10 +3,10 @@ import { Transaction } from '@/types';
 import { parseItalianNumber, parseItalianDate, cleanCsvValue } from '@/lib/utils/format';
 
 /**
- * Parses Transactions.csv from DEGIRO (Italian locale)
+ * Parses Transactions.csv from DEGIRO (supports both Italian and English locales)
  * 
- * Column mapping:
- * Data,Ora,Prodotto,ISIN,Borsa di riferimento,Borsa,Quantità,Quotazione,,Valore locale,,Valore EUR,Tasso di cambio,Commissione AutoFX,Costi di transazione e/o di terze parti EUR,Totale EUR,ID Ordine,
+ * Italian columns: Data,Ora,Prodotto,ISIN,Borsa di riferimento,Borsa,Quantità,Quotazione,,Valore locale,,Valore EUR,Tasso di cambio,Commissione AutoFX,Costi di transazione e/o di terze parti EUR,Totale EUR,ID Ordine,
+ * English columns: Date,Time,Product,ISIN,Reference exchange,Venue,Quantity,Price,,Local value,,Value EUR,Exchange rate,AutoFX Fee,Transaction and/or third party fees EUR,Total EUR,Order ID,
  */
 export function parseTransactionsCsv(csvContent: string): Transaction[] {
     const result = Papa.parse(csvContent, {

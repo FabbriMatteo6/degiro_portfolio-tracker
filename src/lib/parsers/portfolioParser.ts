@@ -3,10 +3,10 @@ import { PortfolioPosition } from '@/types';
 import { parseItalianNumber, cleanCsvValue } from '@/lib/utils/format';
 
 /**
- * Parses Portfolio.csv from DEGIRO (Italian locale)
+ * Parses Portfolio.csv from DEGIRO (supports both Italian and English locales)
  * 
- * Column mapping:
- * Prodotto,Codice,Quantità,Ultimo,Valore,,Valore in EUR
+ * Italian columns: Prodotto,Codice,Quantità,Ultimo,Valore,,Valore in EUR
+ * English columns: Product,Symbol/ISIN,Amount,Closing,Local value,,Value in EUR
  */
 export function parsePortfolioCsv(csvContent: string): PortfolioPosition[] {
     const result = Papa.parse(csvContent, {

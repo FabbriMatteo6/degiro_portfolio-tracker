@@ -125,42 +125,43 @@ GEMINI_API_KEY_PORTFOLIO=AIza...
 
 ## 📁 CSV File Format
 
-The app expects DEGIRO CSV exports with these columns:
+The app supports DEGIRO CSV exports in **both English and Italian**. It auto-detects the language from headers.
 
 ### Account.csv
 
-| Column      | Description         | Example      |
-| ----------- | ------------------- | ------------ |
-| Data        | Date (DD-MM-YYYY)   | 15-12-2025   |
-| Ora         | Time                | 09:30        |
-| Prodotto    | Product name        | APPLE INC    |
-| ISIN        | Security identifier | US0378331005 |
-| Descrizione | Transaction type    | Dividendo    |
-| Variazioni  | Amount change       | 2,40         |
-| Saldo       | Balance             | 150,00       |
+| Column      | Description         | Example           |
+| ----------- | ------------------- | ----------------- |
+| Date        | Date (DD-MM-YYYY)   | 15-12-2025        |
+| Time        | Time                | 09:30             |
+| Product     | Product name        | APPLE INC         |
+| ISIN        | Security identifier | US0378331005      |
+| Description | Transaction type    | Dividend          |
+| Change      | Amount change       | 2,40              |
+| Balance     | Balance             | 150,00            |
 
 ### Portfolio.csv
 
-| Column        | Description   | Example      |
-| ------------- | ------------- | ------------ |
-| Prodotto      | Product name  | APPLE INC    |
-| Codice        | ISIN          | US0378331005 |
-| Quantità     | Quantity held | 10           |
-| Ultimo        | Last price    | 195,00       |
-| Valore in EUR | Value in EUR  | 1820,00      |
+| Column       | Description   | Example      |
+| ------------ | ------------- | ------------ |
+| Product      | Product name  | APPLE INC    |
+| Symbol/ISIN  | ISIN          | US0378331005 |
+| Amount       | Quantity held | 10           |
+| Closing      | Last price    | 195,00       |
+| Value in EUR | Value in EUR  | 1820,00      |
 
 ### Transactions.csv
 
 | Column     | Description         | Example      |
 | ---------- | ------------------- | ------------ |
-| Data       | Date                | 15-12-2025   |
-| Prodotto   | Product name        | APPLE INC    |
+| Date       | Date                | 15-12-2025   |
+| Product    | Product name        | APPLE INC    |
 | ISIN       | Security identifier | US0378331005 |
-| Quantità  | Quantity            | 10           |
-| Quotazione | Price per share     | 190,00       |
-| Totale EUR | Total in EUR        | -1774,00     |
+| Quantity   | Quantity            | 10           |
+| Price      | Price per share     | 190,00       |
+| Total EUR  | Total in EUR        | -1774,00     |
 
 > 📂 Sample files are available in the `samples/` folder!
+
 
 ---
 

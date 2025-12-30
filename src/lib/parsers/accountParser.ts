@@ -3,10 +3,23 @@ import { AccountEntry } from '@/types';
 import { parseItalianNumber, parseItalianDate, cleanCsvValue } from '@/lib/utils/format';
 
 /**
- * Parses Account.csv from DEGIRO (Italian locale)
+ * Detect CSV language based on header row
+ * Returns 'en' for English, 'it' for Italian
+ */
+function detectLanguage(headerRow: string[]): 'en' | 'it' {
+    const headers = headerRow.map(h => cleanCsvValue(h).toLowerCase());
+    // English headers start with "Date,Time,Value date,Product,ISIN,Description"
+    if (headers.includes('date') && headers.includes('description') && headers.includes('change')) {
+        return 'en';
+    }
+    return 'it';
+}
+
+/**
+ * Parses Account.csv from DEGIRO (supports both Italian and English locales)
  * 
- * Column mapping:
- * Data,Ora,Data Valore,Prodotto,ISIN,Descrizione,Borsa,Variazioni,,Saldo,,ID Ordine
+ * Italian columns: Data,Ora,Data Valore,Prodotto,ISIN,Descrizione,Borsa,Variazioni,,Saldo,,ID Ordine
+ * English columns: Date,Time,Value date,Product,ISIN,Description,FX,Change,,Balance,,Order Id
  */
 export function parseAccountCsv(csvContent: string): AccountEntry[] {
     const result = Papa.parse(csvContent, {
@@ -16,6 +29,11 @@ export function parseAccountCsv(csvContent: string): AccountEntry[] {
 
     const entries: AccountEntry[] = [];
     const rows = result.data as string[][];
+
+    if (rows.length === 0) return entries;
+
+    // Detect language from header row
+    const lang = detectLanguage(rows[0]);
 
     // Skip header row
     for (let i = 1; i < rows.length; i++) {
@@ -51,6 +69,24 @@ export function parseAccountCsv(csvContent: string): AccountEntry[] {
     return entries;
 }
 
+// Description keywords in both languages
+const DIVIDEND_KEYWORDS = ['dividendo', 'dividend'];
+const WITHHOLDING_KEYWORDS = ['ritenuta', 'withholding', 'tax'];
+const DEPOSIT_KEYWORDS = ['deposito', 'deposit'];
+const TRANSACTION_FEE_KEYWORDS = ['costi di transazione', 'transaction and/or third party fees'];
+// Note: 'Credito FX' and 'Prelievo FX' are currency conversions, NOT fees
+// Only 'Commissione AutoFX' is an actual fee
+const FX_FEE_KEYWORDS = ['commissione autofx', 'autofx fee'];
+const CONNECTION_FEE_KEYWORDS = ['costi di connessione', 'connection'];
+
+/**
+ * Check if description matches any keywords
+ */
+function matchesKeywords(description: string, keywords: string[]): boolean {
+    const desc = description.toLowerCase();
+    return keywords.some(kw => desc.includes(kw));
+}
+
 /**
  * Extracts dividends from account entries
  */
@@ -70,7 +106,7 @@ export function extractDividends(entries: AccountEntry[]) {
 
     for (const entry of entries) {
         const desc = entry.description.toLowerCase();
-        if (desc.includes('dividendo') || desc.includes('ritenuta')) {
+        if (matchesKeywords(desc, DIVIDEND_KEYWORDS) || matchesKeywords(desc, WITHHOLDING_KEYWORDS)) {
             // Validate date before using toISOString
             if (!entry.date || isNaN(entry.date.getTime())) {
                 console.warn('Skipping dividend entry with invalid date:', entry);
@@ -94,9 +130,9 @@ export function extractDividends(entries: AccountEntry[]) {
 
         for (const entry of group) {
             const desc = entry.description.toLowerCase();
-            if (desc.includes('ritenuta')) {
+            if (matchesKeywords(desc, WITHHOLDING_KEYWORDS)) {
                 withholdingTax += Math.abs(entry.amount);
-            } else if (desc.includes('dividendo')) {
+            } else if (matchesKeywords(desc, DIVIDEND_KEYWORDS)) {
                 grossAmount += entry.amount;
             }
             product = entry.product || product;
@@ -137,17 +173,17 @@ export function extractFees(entries: AccountEntry[]) {
         const desc = entry.description.toLowerCase();
 
         if (entry.amount < 0 && (
-            desc.includes('costi di transazione') ||
-            desc.includes('commissione') ||
-            desc.includes('costi di connessione')
+            matchesKeywords(desc, TRANSACTION_FEE_KEYWORDS) ||
+            matchesKeywords(desc, FX_FEE_KEYWORDS) ||
+            matchesKeywords(desc, CONNECTION_FEE_KEYWORDS)
         )) {
             let type: 'transaction' | 'fx' | 'connection' | 'other' = 'other';
 
-            if (desc.includes('costi di transazione')) {
+            if (matchesKeywords(desc, TRANSACTION_FEE_KEYWORDS)) {
                 type = 'transaction';
-            } else if (desc.includes('commissione') && desc.includes('fx')) {
+            } else if (matchesKeywords(desc, FX_FEE_KEYWORDS)) {
                 type = 'fx';
-            } else if (desc.includes('costi di connessione')) {
+            } else if (matchesKeywords(desc, CONNECTION_FEE_KEYWORDS)) {
                 type = 'connection';
             }
 
@@ -171,7 +207,7 @@ export function extractDeposits(entries: AccountEntry[]) {
     return entries
         .filter(entry => {
             const desc = entry.description.toLowerCase();
-            return desc.includes('deposito') && entry.amount > 0;
+            return matchesKeywords(desc, DEPOSIT_KEYWORDS) && entry.amount > 0;
         })
         .map(entry => ({
             date: entry.date,
