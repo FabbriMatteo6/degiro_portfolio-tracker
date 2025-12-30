@@ -1,0 +1,84 @@
+{
+    "models": {
+        "primary": "gemini-3-flash-preview",
+        "secondary": "gemini-flash-latest",
+        "tertiary": "gemini-2.5-flash"
+    },
+    "assetClasses": [
+        "Stock",
+        "ETF",
+        "ADR",
+        "Bond",
+        "Fund",
+        "Crypto",
+        "REIT",
+        "Commodity",
+        "Cash"
+    ],
+    "sectors": [
+        "Technology",
+        "Financials",
+        "Healthcare",
+        "Consumer Goods",
+        "Consumer Services",
+        "Industrials",
+        "Energy",
+        "Utilities",
+        "Materials",
+        "Real Estate",
+        "Telecommunications",
+        "Automotive",
+        "E-Commerce",
+        "Cryptocurrency",
+        "Diversified",
+        "Aerospace & Defense",
+        "Agriculture",
+        "Apparel & Textiles",
+        "Banking",
+        "Beverages",
+        "Biotechnology",
+        "Building Materials",
+        "Chemicals",
+        "Construction",
+        "Education",
+        "Entertainment",
+        "Food & Staples",
+        "Gaming",
+        "Hotels & Tourism",
+        "Household Products",
+        "Insurance",
+        "Internet Services",
+        "Logistics & Shipping",
+        "Luxury Goods",
+        "Media & Publishing",
+        "Mining",
+        "Oil & Gas",
+        "Packaging",
+        "Pharmaceuticals",
+        "Professional Services",
+        "Retail",
+        "Security Services",
+        "Semiconductors",
+        "Software",
+        "Sports & Recreation",
+        "Steel",
+        "Tobacco",
+        "Transportation",
+        "Waste Management",
+        "Water Utilities"
+    ],
+    "prompts": {
+        "assetClass": {
+            "system": "You are a financial classification expert. Classify securities into asset classes. Return ONLY a JSON object with ISIN keys and asset class values. No explanation, no markdown.",
+            "user": "Classify each security into ONE of these asset classes: {{assetClasses}}\n\nRules:\n- ETF: Products with 'ETF', 'UCITS', or 'Index' in name\n- ADR: Products with 'ADR' in name (American Depositary Receipts)\n- Crypto: Products tracking Bitcoin, Ethereum, or other cryptocurrencies\n- Stock: Individual company shares (default for equities)\n\nSecurities:\n{{securities}}\n\nExample output:\n{\"US5949181045\": \"Stock\", \"IE00BK5BQT80\": \"ETF\", \"US01609W1027\": \"ADR\"}\n\nRespond with ONLY a JSON object:"
+        },
+        "sector": {
+            "system": "You are a financial sector classification expert. Classify securities into industry sectors. Return ONLY a JSON object with ISIN keys and sector values. No explanation, no markdown.",
+            "user": "Classify each security into ONE of these sectors: {{sectors}}\n\nSecurities:\n{{securities}}\n\nExample output:\n{\"US5949181045\": \"Software\", \"IT0000072618\": \"Banking\", \"IE00BK5BQT80\": \"Diversified\"}\n\nRespond with ONLY a JSON object:"
+        },
+        "geography": {
+            "system": "You are a financial geography expert. Determine the primary country for each security. Return ONLY a JSON object with ISIN keys and country values. No explanation, no markdown.",
+            "user": "Determine the PRIMARY country of operation for each security.\n\nRules:\n- Use country names: USA, China, Germany, Italy, UK, France, Switzerland, Japan, etc.\n- For ADRs of Chinese companies (Alibaba, NIO, etc.): use 'China'\n- For global/diversified ETFs: use 'Global'\n- For country-specific ETFs: use that country\n\nSecurities:\n{{securities}}\n\nExample output:\n{\"US5949181045\": \"USA\", \"DE0007664039\": \"Germany\", \"IE00BK5BQT80\": \"Global\"}\n\nRespond with ONLY a JSON object:"
+        }
+    }
+}

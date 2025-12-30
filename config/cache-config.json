@@ -1,0 +1,12 @@
+{
+    "cacheFreshnessHours": 12,
+    "notes": {
+        "cacheFreshnessHours": "How many hours before the cache is considered stale and needs refresh from API",
+        "recommendation": "Set to 24 for daily updates, or lower (e.g., 4-6) for more frequent updates during market hours"
+    },
+    "cacheFiles": {
+        "benchmarks": "data_cache/benchmark_history.json",
+        "fxRates": "data_cache/fx_rates.json",
+        "priceHistory": "data_cache/price_history.json"
+    }
+}

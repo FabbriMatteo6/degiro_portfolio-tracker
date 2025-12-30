@@ -1,0 +1,21 @@
+{
+    "fallbackRates": {
+        "EUR": 1,
+        "USD": 0.95,
+        "GBP": 1.18,
+        "CHF": 1.06,
+        "GBX": 0.0118
+    },
+    "lastUpdated": "2024-12-29",
+    "notes": {
+        "EUR": "Base currency - always 1",
+        "USD": "1 USD = X EUR",
+        "GBP": "1 GBP = X EUR",
+        "CHF": "1 CHF = X EUR",
+        "GBX": "1 GBX (pence) = X EUR (auto-calculated: GBP/100)"
+    },
+    "sources": {
+        "updateUrl": "https://www.xe.com/currencyconverter/",
+        "description": "Update these rates manually when API rate limits are hit"
+    }
+}

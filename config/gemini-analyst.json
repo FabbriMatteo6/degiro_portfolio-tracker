@@ -1,0 +1,44 @@
+{
+    "models": {
+        "primary": "gemini-3-flash-preview",
+        "secondary": "gemini-flash-latest",
+        "tertiary": "gemini-2.5-flash"
+    },
+    "userInputOptions": {
+        "riskTolerance": [
+            "Conservative",
+            "Moderate",
+            "Aggressive",
+            "Very Aggressive"
+        ],
+        "investingObjective": [
+            "Retirement",
+            "House Purchase",
+            "Education",
+            "Wealth Building",
+            "Income Generation",
+            "Emergency Fund"
+        ],
+        "incomeLevel": [
+            "<€30k",
+            "€30-50k",
+            "€50-80k",
+            "€80-120k",
+            ">€120k"
+        ]
+    },
+    "analysisSchema": {
+        "healthScore": "number (1-100)",
+        "riskAssessment": "string",
+        "diversificationAnalysis": "string",
+        "benchmarkComparison": "string",
+        "suggestions": "string[]",
+        "warnings": "string[]",
+        "targetAllocation": "object { assetClass: percentage }",
+        "timelineGoals": "string"
+    },
+    "prompt": {
+        "system": "You are an expert financial advisor and portfolio analyst. Analyze the provided portfolio data and user profile to give comprehensive, actionable investment advice. Be specific with numbers and percentages. Consider the user's risk tolerance, investment timeline, and financial situation. Return your analysis as a JSON object.",
+        "user": "Analyze this portfolio and provide personalized advice.\n\n## User Profile\n{{userProfile}}\n\n## Portfolio Summary\n{{portfolioSummary}}\n\n## Current Allocations\n{{allocations}}\n\n## Performance Metrics\n{{metrics}}\n\n## Benchmark Comparison\n{{benchmarks}}\n\nProvide your analysis in this exact JSON format:\n{\n  \"healthScore\": <1-100>,\n  \"healthScoreReason\": \"<brief explanation>\",\n  \"riskAssessment\": {\n    \"currentRisk\": \"<Conservative|Moderate|Aggressive|Very Aggressive>\",\n    \"matchesProfile\": <true|false>,\n    \"explanation\": \"<detailed explanation>\"\n  },\n  \"diversificationAnalysis\": {\n    \"sectorDiversification\": \"<Good|Fair|Poor>\",\n    \"geographicDiversification\": \"<Good|Fair|Poor>\",\n    \"assetClassDiversification\": \"<Good|Fair|Poor>\",\n    \"details\": \"<detailed analysis>\"\n  },\n  \"benchmarkComparison\": {\n    \"vsSP500\": \"<Outperforming|Underperforming|Matching>\",\n    \"vsMSCIWorld\": \"<Outperforming|Underperforming|Matching>\",\n    \"commentary\": \"<detailed comparison>\"\n  },\n  \"suggestions\": [\n    \"<specific actionable suggestion 1>\",\n    \"<specific actionable suggestion 2>\",\n    \"<specific actionable suggestion 3>\"\n  ],\n  \"warnings\": [\n    \"<warning about concentration or risk 1>\",\n    \"<warning 2 if applicable>\"\n  ],\n  \"targetAllocation\": {\n    \"Stocks\": <percentage>,\n    \"ETFs\": <percentage>,\n    \"Bonds\": <percentage>,\n    \"Cash\": <percentage>,\n    \"Other\": <percentage>\n  },\n  \"timelineGoals\": {\n    \"onTrack\": <true|false>,\n    \"projectedValue\": \"<€amount at deadline>\",\n    \"monthlyNeeded\": \"<€amount if not on track>\",\n    \"analysis\": \"<detailed timeline analysis>\"\n  }\n}"
+    }
+}

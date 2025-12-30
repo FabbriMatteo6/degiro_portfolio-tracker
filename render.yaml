@@ -1,0 +1,14 @@
+# Render deployment configuration
+# See: https://render.com/docs/render-yaml
+
+services:
+  - type: web
+    name: degiro-portfolio-tracker
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
