@@ -102,19 +102,38 @@ interface DividendEntry {
 
 interface DividendsTableProps {
     dividends: DividendEntry[];
+    convertToEur?: (amount: number, currency: string, date: Date | string) => number;
 }
 
-export function DividendsTable({ dividends }: DividendsTableProps) {
-    const totalGross = dividends.reduce((sum, d) => sum + d.grossAmount, 0);
-    const totalTax = dividends.reduce((sum, d) => sum + d.withholdingTax, 0);
-    const totalNet = dividends.reduce((sum, d) => sum + d.netAmount, 0);
+export function DividendsTable({ dividends, convertToEur }: DividendsTableProps) {
+    // Calculate totals in EUR using conversion function if provided
+    const totals = dividends.reduce((acc, d) => {
+        const convertedNet = convertToEur
+            ? convertToEur(d.netAmount, d.currency, d.date)
+            : d.netAmount;
+        const convertedGross = convertToEur
+            ? convertToEur(d.grossAmount, d.currency, d.date)
+            : d.grossAmount;
+        const convertedTax = convertToEur
+            ? convertToEur(d.withholdingTax, d.currency, d.date)
+            : d.withholdingTax;
+
+        return {
+            gross: acc.gross + convertedGross,
+            tax: acc.tax + convertedTax,
+            net: acc.net + convertedNet,
+        };
+    }, { gross: 0, tax: 0, net: 0 });
+
+    // Check if any dividends are in foreign currency
+    const hasForeignCurrency = dividends.some(d => d.currency !== 'EUR');
 
     return (
         <Card className="bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Dividends</CardTitle>
                 <Badge variant="secondary" className="text-green-500">
-                    Total: {formatCurrency(totalNet)}
+                    Total: {formatCurrency(totals.net)}
                 </Badge>
             </CardHeader>
             <CardContent>
@@ -127,20 +146,35 @@ export function DividendsTable({ dividends }: DividendsTableProps) {
                                 <TableHead className="text-right">Gross</TableHead>
                                 <TableHead className="text-right">Tax</TableHead>
                                 <TableHead className="text-right">Net</TableHead>
+                                {hasForeignCurrency && convertToEur && (
+                                    <TableHead className="text-right">EUR</TableHead>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {dividends.slice(0, 20).map((div, index) => (
-                                <TableRow key={`${div.date.toISOString()}-${index}`}>
-                                    <TableCell className="text-muted-foreground">
-                                        {div.date.toLocaleDateString('it-IT')}
-                                    </TableCell>
-                                    <TableCell className="truncate max-w-[150px]">{div.product}</TableCell>
-                                    <TableCell className="text-right">{formatCurrency(div.grossAmount, div.currency)}</TableCell>
-                                    <TableCell className="text-right text-red-500">-{formatCurrency(div.withholdingTax, div.currency)}</TableCell>
-                                    <TableCell className="text-right font-medium text-green-500">{formatCurrency(div.netAmount, div.currency)}</TableCell>
-                                </TableRow>
-                            ))}
+                            {dividends.slice(0, 20).map((div, index) => {
+                                const eurEquivalent = convertToEur
+                                    ? convertToEur(div.netAmount, div.currency, div.date)
+                                    : div.netAmount;
+                                const showEurColumn = div.currency !== 'EUR' && convertToEur;
+
+                                return (
+                                    <TableRow key={`${div.date.toISOString()}-${index}`}>
+                                        <TableCell className="text-muted-foreground">
+                                            {div.date.toLocaleDateString('it-IT')}
+                                        </TableCell>
+                                        <TableCell className="truncate max-w-[150px]">{div.product}</TableCell>
+                                        <TableCell className="text-right">{formatCurrency(div.grossAmount, div.currency)}</TableCell>
+                                        <TableCell className="text-right text-red-500">-{formatCurrency(div.withholdingTax, div.currency)}</TableCell>
+                                        <TableCell className="text-right font-medium text-green-500">{formatCurrency(div.netAmount, div.currency)}</TableCell>
+                                        {hasForeignCurrency && convertToEur && (
+                                            <TableCell className="text-right text-muted-foreground">
+                                                {showEurColumn ? formatCurrency(eurEquivalent) : '—'}
+                                            </TableCell>
+                                        )}
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>
@@ -152,15 +186,15 @@ export function DividendsTable({ dividends }: DividendsTableProps) {
                 <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4 text-center">
                     <div>
                         <p className="text-sm text-muted-foreground">Total Gross</p>
-                        <p className="font-bold">{formatCurrency(totalGross)}</p>
+                        <p className="font-bold">{formatCurrency(totals.gross)}</p>
                     </div>
                     <div>
                         <p className="text-sm text-muted-foreground">Total Tax</p>
-                        <p className="font-bold text-red-500">-{formatCurrency(totalTax)}</p>
+                        <p className="font-bold text-red-500">-{formatCurrency(totals.tax)}</p>
                     </div>
                     <div>
                         <p className="text-sm text-muted-foreground">Total Net</p>
-                        <p className="font-bold text-green-500">{formatCurrency(totalNet)}</p>
+                        <p className="font-bold text-green-500">{formatCurrency(totals.net)}</p>
                     </div>
                 </div>
             </CardContent>

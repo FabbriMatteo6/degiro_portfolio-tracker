@@ -135,6 +135,68 @@ export function calculateRealizedGains(transactions: Transaction[]) {
 }
 
 /**
+ * Calculates realized gains from sell transactions within a specific date range.
+ * 
+ * NOTE: This function processes ALL transactions up to endDate to maintain accurate
+ * cost basis tracking, but only counts gains from sells that occur within the date range.
+ * This ensures correct average cost calculation even when selling shares that were
+ * bought before the period started.
+ * 
+ * @param transactions All transactions (must be sorted by date)
+ * @param startDate Start of the period (inclusive)
+ * @param endDate End of the period (inclusive)
+ */
+export function calculateRealizedGainsForPeriod(
+    transactions: Transaction[],
+    startDate: Date,
+    endDate: Date
+) {
+    const positions: { [isin: string]: { avgCost: number; quantity: number } } = {};
+    let totalRealizedGain = 0;
+    const gains: { date: Date; product: string; isin: string; gain: number }[] = [];
+
+    for (const tx of transactions) {
+        if (!tx.isin) continue;
+
+        // Skip transactions after the end date
+        if (tx.date > endDate) break;
+
+        if (!positions[tx.isin]) {
+            positions[tx.isin] = { avgCost: 0, quantity: 0 };
+        }
+
+        if (tx.quantity > 0) {
+            // Buy - update average cost (always track for cost basis)
+            const newTotalCost = (positions[tx.isin].avgCost * positions[tx.isin].quantity) + Math.abs(tx.totalEur);
+            const newQuantity = positions[tx.isin].quantity + tx.quantity;
+            positions[tx.isin].avgCost = newQuantity > 0 ? newTotalCost / newQuantity : 0;
+            positions[tx.isin].quantity = newQuantity;
+        } else if (tx.quantity < 0) {
+            // Sell - calculate realized gain
+            const sellQuantity = Math.abs(tx.quantity);
+            const costBasis = positions[tx.isin].avgCost * sellQuantity;
+            const proceeds = Math.abs(tx.totalEur);
+            const gain = proceeds - costBasis;
+
+            // Only count if within the date range
+            if (tx.date >= startDate) {
+                totalRealizedGain += gain;
+                gains.push({
+                    date: tx.date,
+                    product: tx.product,
+                    isin: tx.isin,
+                    gain,
+                });
+            }
+
+            positions[tx.isin].quantity -= sellQuantity;
+        }
+    }
+
+    return { totalRealizedGain, gains };
+}
+
+/**
  * Groups transactions by month for time series analysis
  */
 export function groupTransactionsByMonth(transactions: Transaction[]) {

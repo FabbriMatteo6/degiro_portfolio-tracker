@@ -22,10 +22,11 @@ interface NorthStarMetricsProps {
  */
 export function NorthStarMetrics({
     totalValue,
+    totalCost,
     totalGain,
     totalGainPercent,
     twr,
-}: NorthStarMetricsProps) {
+}: NorthStarMetricsProps & { totalCost: number }) {
     const isPositive = totalGain >= 0;
     const isTwrPositive = twr >= 0;
 
@@ -49,6 +50,9 @@ export function NorthStarMetrics({
                         <div className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight">
                             {formatCurrency(totalValue)}
                         </div>
+                        <div className="mt-1 text-sm text-slate-400 font-medium opacity-80">
+                            Cost Basis: {formatCurrency(totalCost)}
+                        </div>
                     </div>
 
                     {/* Secondary metrics */}
@@ -69,7 +73,7 @@ export function NorthStarMetrics({
                                 )}
                             </div>
                             <div>
-                                <div className="text-xs text-slate-400 uppercase tracking-wider">P&L</div>
+                                <div className="text-xs text-slate-400 uppercase tracking-wider">Unrealized P&L</div>
                                 <div className={`text-xl font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                                     {isPositive ? '+' : ''}{formatCurrency(totalGain)}
                                 </div>

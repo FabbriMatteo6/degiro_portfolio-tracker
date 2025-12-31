@@ -44,6 +44,7 @@ graph TB
         API3["/api/historical-prices"]
         API4["/api/portfolio-prices"]
         API5["/api/isin-metadata"]
+        API6["/api/historical-exchange-rates"]
     end
     
     subgraph "Cache Layer"
@@ -52,12 +53,14 @@ graph TB
         FX["fx_rates.json"]
         PH["price_history.json"]
         IM["isin_metadata.json"]
+        HFX["historical-exchange-rates.json"]
     end
     
     subgraph "External APIs"
         RapidAPI["RapidAPI Real-Time Finance"]
         YahooAPI["Yahoo Finance 166 (Fallback)"]
         GeminiAPI["Google Gemini LLM"]
+        FrankfurterAPI["Frankfurter.app (ECB Rates)"]
     end
     
     CSV["DEGIRO CSV Files"] --> Parsers
@@ -111,7 +114,8 @@ portfolio-tracker/
 │   │   │   ├── historical-prices/route.ts # Stock price history
 │   │   │   ├── portfolio-analyst/route.ts # AI portfolio analysis
 │   │   │   ├── portfolio-prices/route.ts  # Batch price fetching
-│   │   │   └── isin-metadata/route.ts     # Gemini classification
+│   │   │   ├── isin-metadata/route.ts     # Gemini classification
+│   │   │   └── historical-exchange-rates/route.ts # Historical FX rates
 │   │   ├── globals.css
 │   │   ├── layout.tsx
 │   │   └── page.tsx
@@ -119,9 +123,10 @@ portfolio-tracker/
 │   │   ├── Dashboard.tsx           # Main dashboard
 │   │   ├── FileUpload.tsx          # CSV upload handler
 │   │   ├── Charts.tsx              # Recharts visualizations
-│   │   ├── MetricsDisplay.tsx      # Performance metrics UI
+│   │   ├── MetricsDisplay.tsx      # Secondary metrics grid
 │   │   ├── PortfolioAnalyst.tsx    # AI-powered portfolio analysis panel
-│   │   ├── NorthStarMetrics.tsx    # Top-level KPI cards
+│   │   ├── NorthStarMetrics.tsx    # Hero section (Net Value, Cost Basis, Unrealized P&L)
+│   │   ├── OperationsTable.tsx     # Trading history with fee breakdown
 │   │   ├── Tables.tsx              # Holdings/positions tables
 │   │   ├── Sparkline.tsx           # 30-day trend mini-charts
 │   │   ├── TimePeriodSelector.tsx  # YTD/1Y/3Y/5Y selector
@@ -136,7 +141,8 @@ portfolio-tracker/
 │   │   ├── hooks/
 │   │   │   ├── useIsinMetadata.ts  # Fetch ISIN classification
 │   │   │   ├── usePortfolioPrices.ts
-│   │   │   └── usePortfolioStorage.ts # localStorage persistence
+│   │   │   ├── usePortfolioStorage.ts # localStorage persistence
+│   │   │   └── useHistoricalRates.ts  # Historical FX conversion
 │   │   ├── parsers/
 │   │   │   ├── accountParser.ts
 │   │   │   ├── portfolioParser.ts
@@ -144,6 +150,7 @@ portfolio-tracker/
 │   │   ├── services/
 │   │   │   ├── geminiAnalystService.ts    # AI portfolio analyst
 │   │   │   ├── geminiClassificationService.ts # Gemini LLM integration
+│   │   │   ├── historicalExchangeRateService.ts # ECB historical rates
 │   │   │   ├── priceService.ts     # Price fetching with cache
 │   │   │   ├── rapidApiService.ts
 │   │   │   └── yahooApiService.ts  # Yahoo Finance fallback
@@ -176,6 +183,7 @@ All API responses are cached to `data_cache/` with configurable freshness:
 | `fx_rates.json` | EUR/USD, EUR/GBP, EUR/CHF | 20h |
 | `price_history.json` | Individual stock prices | 20h |
 | `isin_metadata.json` | Gemini classification results | Permanent |
+| `historical-exchange-rates.json` | ECB rates since 1999 | Daily update |
 
 ### 4.2 Cache Flow
 
@@ -305,6 +313,18 @@ sequenceDiagram
 }
 ```
 
+### 7.4 GET/POST /api/historical-exchange-rates
+
+**Purpose**: Historical exchange rates for dividend currency conversion
+
+**Data Source**: [frankfurter.app](https://frankfurter.app) (ECB data since 1999)
+
+**Features**:
+- GET: Read cached historical rates
+- POST: Update cache with missing days
+- Supports USD, GBP, CHF → EUR conversion
+- Fallback to most recent rate for weekends/holidays
+
 ---
 
 ## 8. Calculation Engine
@@ -385,5 +405,5 @@ Remove-Item .\data_cache\* -Force
 
 ---
 
-*Report updated: 2025-12-30*
+*Report updated: 2025-12-31*
 *Application version: 0.1.0*

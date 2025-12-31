@@ -13,6 +13,7 @@ A powerful portfolio analysis tool for **DEGIRO** users that transforms your CSV
 | 🎯**Benchmark Comparison** | Compare your returns against S&P 500 and MSCI World           |
 | 🏷️**AI Classification**  | Automatic sector, geography, and asset class detection        |
 | 🤖**AI Portfolio Analyst** | Get personalized insights powered by Google Gemini            |
+| 📜**Trading Operations**   | Chronological history with fee breakdown (Tx vs FX)           |
 | 💱**Multi-Currency**       | Automatic EUR/USD/GBP/CHF conversion                          |
 | 🔒**Privacy-First**        | All data stays on your computer - nothing is uploaded         |
 

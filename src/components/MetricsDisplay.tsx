@@ -4,6 +4,7 @@ import React from 'react';
 import { TrendingUp, TrendingDown, DollarSign, PieChart, Activity, Percent } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatPercent } from '@/lib/utils/format';
+import { TimePeriod } from '@/types';
 
 interface MetricCardProps {
     title: string;
@@ -28,7 +29,7 @@ function MetricCard({ title, value, subtitle, trend, icon }: MetricCardProps) {
             </CardHeader>
             <CardContent>
                 <div className={`text-2xl font-bold ${trend === 'up' ? 'text-green-500' :
-                        trend === 'down' ? 'text-red-500' : ''
+                    trend === 'down' ? 'text-red-500' : ''
                     }`}>
                     {value}
                 </div>
@@ -45,35 +46,111 @@ function MetricCard({ title, value, subtitle, trend, icon }: MetricCardProps) {
 interface PortfolioOverviewProps {
     totalValue: number;
     totalCost: number;
-    totalGain: number;
-    totalGainPercent: number;
     cashBalance: number;
     dividendsYTD: number;
     feesYTD: number;
+    timePeriod?: TimePeriod;
+    operationalGainLoss?: number;
+    operationalDividends?: number;
+}
+
+/**
+ * Get a human-readable label for the time period
+ */
+export function getTimePeriodLabel(period: TimePeriod): string {
+    switch (period) {
+        case 'YTD':
+            return 'YTD';
+        case '1Y':
+            return '1 Year';
+        case '3Y':
+            return '3 Years';
+        case '5Y':
+            return '5 Years';
+        case 'CUSTOM':
+            return 'Custom';
+        default:
+            return 'All Time';
+    }
+}
+
+/**
+ * Operational Gain/Loss Card with dividends checkbox
+ */
+function OperationalGainCard({
+    operationalGainLoss,
+    operationalDividends,
+    periodLabel,
+}: {
+    operationalGainLoss: number;
+    operationalDividends: number;
+    periodLabel: string;
+}) {
+    const [includeDividends, setIncludeDividends] = React.useState(false);
+
+    const totalOperational = includeDividends
+        ? operationalGainLoss + operationalDividends
+        : operationalGainLoss;
+
+    const isPositive = totalOperational >= 0;
+    const taxLabel = isPositive ? 'Capital Gain' : 'Capital Loss (offsettable)';
+
+    return (
+        <Card className="bg-card/50 backdrop-blur-sm hover:bg-card/70 transition-colors">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Operational Gain/Loss
+                </CardTitle>
+                {isPositive ? (
+                    <TrendingUp className="h-4 w-4 text-green-500" />
+                ) : (
+                    <TrendingDown className="h-4 w-4 text-orange-500" />
+                )}
+            </CardHeader>
+            <CardContent>
+                <div className={`text-2xl font-bold ${isPositive ? 'text-green-500' : 'text-orange-500'}`}>
+                    {isPositive ? '+' : ''}{formatCurrency(totalOperational)}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                    <input
+                        type="checkbox"
+                        id="include-dividends"
+                        checked={includeDividends}
+                        onChange={(e) => setIncludeDividends(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <label
+                        htmlFor="include-dividends"
+                        className="text-xs text-muted-foreground cursor-pointer"
+                    >
+                        Include dividends
+                    </label>
+                </div>
+                <p className={`text-xs mt-1 ${isPositive ? 'text-green-600' : 'text-orange-600'}`}>
+                    {taxLabel}
+                </p>
+            </CardContent>
+        </Card>
+    );
 }
 
 export function PortfolioOverview({
-    totalValue,
-    totalCost,
-    totalGain,
-    totalGainPercent,
     cashBalance,
     dividendsYTD,
     feesYTD,
-}: PortfolioOverviewProps) {
+    timePeriod = 'ALL',
+    operationalGainLoss = 0,
+    operationalDividends = 0,
+}: Omit<PortfolioOverviewProps, 'totalValue' | 'totalCost'>) {
+    const periodLabel = getTimePeriodLabel(timePeriod);
+    const dividendLabel = timePeriod === 'YTD' ? 'Dividends (YTD)' : `Dividends (${periodLabel})`;
+
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard
-                title="Total Portfolio Value"
-                value={formatCurrency(totalValue)}
-                subtitle={`Cost basis: ${formatCurrency(totalCost)}`}
-                icon={<DollarSign className="h-4 w-4 text-blue-500" />}
-            />
-            <MetricCard
-                title="Total Gain/Loss"
-                value={formatCurrency(totalGain)}
-                subtitle={formatPercent(totalGainPercent / 100)}
-                trend={totalGain >= 0 ? 'up' : 'down'}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <OperationalGainCard
+                operationalGainLoss={operationalGainLoss}
+                operationalDividends={operationalDividends}
+                periodLabel={periodLabel}
             />
             <MetricCard
                 title="Cash Balance"
@@ -82,7 +159,7 @@ export function PortfolioOverview({
                 icon={<PieChart className="h-4 w-4 text-purple-500" />}
             />
             <MetricCard
-                title="Dividends (YTD)"
+                title={dividendLabel}
                 value={formatCurrency(dividendsYTD)}
                 subtitle={`Fees: ${formatCurrency(feesYTD)}`}
                 icon={<Activity className="h-4 w-4 text-green-500" />}
@@ -90,6 +167,8 @@ export function PortfolioOverview({
         </div>
     );
 }
+
+
 
 interface PerformanceMetricsProps {
     twr: number;

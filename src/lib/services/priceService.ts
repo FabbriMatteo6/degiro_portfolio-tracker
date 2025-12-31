@@ -34,6 +34,37 @@ interface PriceCache {
     [symbol: string]: CacheEntry;
 }
 
+// Mutex for cache file operations
+class AsyncLock {
+    private promise: Promise<void>;
+
+    constructor() {
+        this.promise = Promise.resolve();
+    }
+
+    async acquire<T>(callback: () => Promise<T>): Promise<T> {
+        let release: () => void;
+        const newPromise = new Promise<void>(resolve => {
+            release = resolve;
+        });
+
+        // Chain the new promise to the existing one
+        const previousPromise = this.promise;
+        this.promise = newPromise;
+
+        // Wait for the previous operation to complete
+        await previousPromise;
+
+        try {
+            return await callback();
+        } finally {
+            release!();
+        }
+    }
+}
+
+const cacheLock = new AsyncLock();
+
 /**
  * Ensure cache directory exists
  */
@@ -175,16 +206,33 @@ export async function getHistoricalPrices(symbol: string, period: string = '5Y')
         }
     }
 
-    if (freshData && freshData.length > 0) {
-        // Update cache
-        cache[symbol] = {
-            lastUpdated: new Date().toISOString(),
-            currency: 'USD', // Default, could be detected from API
-            history: freshData,
-        };
+    // Try Yahoo Finance 15 as third fallback if both primary and 166 fail
+    if (!freshData || freshData.length === 0) {
+        console.log(`[FALLBACK 2] Yahoo Finance 166 failed for ${symbol}, trying Yahoo Finance 15...`);
+        const { fetchYahoo15StockHistory } = await import('./yahoo15ApiService');
+        const yahoo15Data = await fetchYahoo15StockHistory(symbol, period);
 
-        await saveCache(PRICE_CACHE_FILE, cache);
-        console.log(`[CACHE UPDATE] ${symbol} saved with ${freshData.length} points`);
+        if (yahoo15Data && yahoo15Data.length > 0) {
+            freshData = yahoo15Data;
+            console.log(`[FALLBACK 2] Yahoo Finance 15 returned ${freshData.length} points for ${symbol}`);
+        }
+    }
+
+    if (freshData && freshData.length > 0) {
+        // Update cache with lock to prevent race conditions
+        await cacheLock.acquire(async () => {
+            // Re-read cache to get latest state
+            const currentCache = await loadCache(PRICE_CACHE_FILE);
+
+            currentCache[symbol] = {
+                lastUpdated: new Date().toISOString(),
+                currency: 'USD', // Default, could be detected from API
+                history: freshData!,
+            };
+
+            await saveCache(PRICE_CACHE_FILE, currentCache);
+            console.log(`[CACHE UPDATE] ${symbol} saved with ${freshData!.length} points`);
+        });
 
         return {
             prices: freshData,
@@ -290,14 +338,18 @@ export async function getHistoricalFxRate(fromCurrency: string, toCurrency: stri
     const freshData = await fetchFxTimeSeries(fromCurrency, toCurrency);
 
     if (freshData && freshData.length > 0) {
-        cache[symbol] = {
-            lastUpdated: new Date().toISOString(),
-            currency: toCurrency,
-            history: freshData,
-        };
+        await cacheLock.acquire(async () => {
+            const currentCache = await loadCache(FX_CACHE_FILE);
 
-        await saveCache(FX_CACHE_FILE, cache);
-        console.log(`[FX CACHE UPDATE] ${symbol} saved with ${freshData.length} points`);
+            currentCache[symbol] = {
+                lastUpdated: new Date().toISOString(),
+                currency: toCurrency,
+                history: freshData,
+            };
+
+            await saveCache(FX_CACHE_FILE, currentCache);
+            console.log(`[FX CACHE UPDATE] ${symbol} saved with ${freshData.length} points`);
+        });
 
         return {
             rates: freshData,

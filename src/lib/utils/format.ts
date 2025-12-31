@@ -147,3 +147,10 @@ export function subtractYears(date: Date, years: number): Date {
     result.setFullYear(result.getFullYear() - years);
     return result;
 }
+
+/**
+ * Formats a Date object to Italian locale date string (DD/MM/YYYY)
+ */
+export function formatDate(date: Date): string {
+    return date.toLocaleDateString('it-IT');
+}

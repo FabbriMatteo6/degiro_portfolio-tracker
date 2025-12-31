@@ -4,23 +4,34 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Moon, Sun, ArrowLeft, BarChart3, Loader2, Trash2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PortfolioOverview, PerformanceMetrics } from '@/components/MetricsDisplay';
+import { PortfolioOverview, PerformanceMetrics, getTimePeriodLabel } from '@/components/MetricsDisplay';
 import { NorthStarMetrics } from '@/components/NorthStarMetrics';
 import { PerformanceChart, AllocationPieChart } from '@/components/Charts';
 import { PositionsTable, DividendsTable, FeesTable } from '@/components/Tables';
+import { OperationsTable } from '@/components/OperationsTable';
 import { TimePeriodSelector } from '@/components/TimePeriodSelector';
 import { SettingsButton } from '@/components/TickerMappingPanel';
 import { parseAccountCsv, extractDividends, extractFees, extractDeposits } from '@/lib/parsers/accountParser';
 import { parsePortfolioCsv, extractCashPositions, calculateTotalPortfolioValue } from '@/lib/parsers/portfolioParser';
-import { parseTransactionsCsv, calculateCostBasis, calculateRealizedGains } from '@/lib/parsers/transactionParser';
+import { parseTransactionsCsv, calculateCostBasis, calculateRealizedGains, calculateRealizedGainsForPeriod } from '@/lib/parsers/transactionParser';
 import { calculateAllocation } from '@/lib/data/isinMapping';
 import { calculateAllMetrics } from '@/lib/calculations/metrics';
-import { TimePeriod } from '@/types';
+import { TimePeriod, PortfolioPosition } from '@/types';
+
 import { getToday, getStartOfYear, subtractYears } from '@/lib/utils/format';
 import { Badge } from '@/components/ui/badge';
 import { useIsinMetadata } from '@/lib/hooks/useIsinMetadata';
 import { useSparklinePrices } from '@/lib/hooks/useSparklinePrices';
+import { useHistoricalRates } from '@/lib/hooks/useHistoricalRates';
 import { PortfolioAnalyst } from '@/components/PortfolioAnalyst';
+import { YearlyPerformanceGrid } from '@/components/YearlyPerformanceGrid';
+import { useYearlyPerformance } from '@/lib/hooks/useYearlyPerformance';
+import { usePortfolioStorage } from '@/lib/hooks/usePortfolioStorage';
+import {
+    getHoldingsAtDate,
+    calculatePortfolioValueAtDate,
+    getTotalCostBasisAtDate
+} from '@/lib/calculations/calculateYearlyTWR';
 
 interface DashboardProps {
     files: {
@@ -36,6 +47,7 @@ interface DashboardProps {
 
 export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUpdated }: DashboardProps) {
     const [timePeriod, setTimePeriod] = useState<TimePeriod>('ALL');
+    const [customDateRange, setCustomDateRange] = useState<{ startDate: Date; endDate: Date } | null>(null);
     const [showBenchmarks, setShowBenchmarks] = useState(true);
     const [showDeposits, setShowDeposits] = useState(false);
     const [benchmarkData, setBenchmarkData] = useState<{
@@ -46,6 +58,9 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
     const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({
         EUR: 1, USD: 0.85, GBP: 1.17, CHF: 1.08, GBX: 0.0117
     });
+
+    // Historical exchange rates for dividend conversion
+    const { convertToEur: convertHistorical, loading: historicalRatesLoading } = useHistoricalRates();
 
     // Fetch exchange rates from API
     useEffect(() => {
@@ -125,6 +140,10 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
     // Fetch 30-day sparkline prices for holdings
     const { sparklineData, fetchSparklines } = useSparklinePrices();
 
+    // Yearly performance for grid
+    const { yearlyReturns, loading: yearlyLoading, priceData, fetchYearlyPerformance } = useYearlyPerformance();
+    const { loadTickerMappings } = usePortfolioStorage();
+
     useEffect(() => {
         if (parsedData.portfolioPositions.length > 0) {
             const positions = parsedData.portfolioPositions.map(p => ({
@@ -134,6 +153,18 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
             fetchSparklines(positions);
         }
     }, [parsedData.portfolioPositions, fetchSparklines]);
+
+    // Fetch yearly performance data when transactions are available
+    // Note: Using useRef to ensure we only fetch once per session
+    const hasFetchedYearlyPerformance = React.useRef(false);
+
+    useEffect(() => {
+        if (parsedData.transactions.length > 0 && !hasFetchedYearlyPerformance.current) {
+            hasFetchedYearlyPerformance.current = true;
+            const mappings = loadTickerMappings();
+            fetchYearlyPerformance(parsedData.transactions, mappings, exchangeRates);
+        }
+    }, [parsedData.transactions]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Calculate metrics
     const calculations = useMemo(() => {
@@ -168,9 +199,14 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
         // Dividends and fees YTD
         const today = getToday();
         const startOfYear = getStartOfYear(today);
+        // Convert dividends to EUR using historical exchange rates from dividend date
         const dividendsYTD = dividends
             .filter(d => d.date >= startOfYear)
-            .reduce((sum, d) => sum + d.netAmount, 0);
+            .reduce((sum, d) => {
+                // Convert dividend amount using rate from dividend date
+                const amountInEur = convertHistorical(d.netAmount, d.currency, d.date);
+                return sum + amountInEur;
+            }, 0);
         const feesYTD = fees
             .filter(f => f.date >= startOfYear)
             .reduce((sum, f) => sum + f.amount, 0);
@@ -204,7 +240,7 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
         const sortedTx = [...transactions].sort((a, b) => a.date.getTime() - b.date.getTime());
         const firstDate = sortedTx.length > 0 ? sortedTx[0].date : new Date(2021, 0, 1);
 
-        const timeSeriesData: { date: string; portfolio: number; sp500: number; msciWorld: number; deposit: number }[] = [];
+        const timeSeriesData: { date: string; portfolio: number; invested: number; sp500: number; msciWorld: number; deposit: number }[] = [];
         let runningValue = 0;
 
         // Create maps for benchmark data lookup
@@ -287,6 +323,7 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
             timeSeriesData.push({
                 date: tempDate.toISOString(),
                 portfolio: portfolioValue,
+                invested: cumulativeInvested,
                 sp500: sp500Value || portfolioValue * 0.98,
                 msciWorld: msciValue || portfolioValue * 0.95,
                 deposit: monthDeposit,
@@ -353,12 +390,13 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
             dividends: parsedData.dividends,
             fees: parsedData.fees,
         };
-    }, [parsedData, benchmarkData]);
+    }, [parsedData, benchmarkData, convertHistorical]);
 
     // Filter data by time period
     const filteredChartData = useMemo(() => {
         const today = getToday();
         let startDate: Date;
+        let endDate: Date = today;
 
         switch (timePeriod) {
             case 'YTD':
@@ -373,14 +411,25 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
             case '5Y':
                 startDate = subtractYears(today, 5);
                 break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    startDate = new Date(2020, 0, 1);
+                }
+                break;
             default:
                 startDate = new Date(2020, 0, 1);
         }
 
         return calculations.timeSeriesData.filter(
-            d => new Date(d.date) >= startDate
+            d => {
+                const date = new Date(d.date);
+                return date >= startDate && date <= endDate;
+            }
         );
-    }, [calculations.timeSeriesData, timePeriod]);
+    }, [calculations.timeSeriesData, timePeriod, customDateRange]);
 
     // Calculate metrics for the selected time period
     const filteredMetrics = useMemo(() => {
@@ -464,6 +513,373 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
         };
     }, [filteredChartData, calculations.metrics]);
 
+    // Calculate period-filtered dividends and fees
+    const periodFilteredDividends = useMemo(() => {
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return calculations.dividendsYTD;
+                }
+                break;
+            default:
+                // ALL - return all dividends from parsedData
+                return calculations.dividends.reduce((sum, d) => {
+                    const amountInEur = convertHistorical(d.netAmount, d.currency, d.date);
+                    return sum + amountInEur;
+                }, 0);
+        }
+
+        return calculations.dividends
+            .filter(d => d.date >= startDate && d.date <= endDate)
+            .reduce((sum, d) => {
+                const amountInEur = convertHistorical(d.netAmount, d.currency, d.date);
+                return sum + amountInEur;
+            }, 0);
+    }, [timePeriod, customDateRange, calculations.dividends, calculations.dividendsYTD, convertHistorical]);
+
+    const periodFilteredFees = useMemo(() => {
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return calculations.feesYTD;
+                }
+                break;
+            default:
+                // ALL - return all fees
+                return calculations.fees.reduce((sum, f) => sum + f.amount, 0);
+        }
+
+        return calculations.fees
+            .filter(f => f.date >= startDate && f.date <= endDate)
+            .reduce((sum, f) => sum + f.amount, 0);
+    }, [timePeriod, customDateRange, calculations.fees, calculations.feesYTD]);
+
+    // Calculate period-filtered operational (realized) gains
+    const periodFilteredOperationalGains = useMemo(() => {
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return calculations.totalRealizedGain;
+                }
+                break;
+            default:
+                // ALL - return all realized gains
+                return calculations.totalRealizedGain;
+        }
+
+        const { totalRealizedGain } = calculateRealizedGainsForPeriod(
+            parsedData.transactions,
+            startDate,
+            endDate
+        );
+
+        return totalRealizedGain;
+    }, [timePeriod, customDateRange, parsedData.transactions, calculations.totalRealizedGain]);
+
+    // Calculate period-sensitive portfolio value and gain/loss
+    // Uses historical prices from the yearly performance cache to calculate
+    // what the portfolio looked like at the END of the selected period
+    /* const periodSensitiveMetrics = useMemo(() => {
+        // Determine the end date of the selected period
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                endDate = today;
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                endDate = today;
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                endDate = today;
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                endDate = today;
+                break;
+            case 'ALL':
+                startDate = new Date(1900, 0, 1);
+                endDate = today;
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    startDate = new Date(1900, 0, 1);
+                }
+                break;
+            default:
+                startDate = new Date(1900, 0, 1);
+        }
+
+        // If the period ends today (or close to it), ALWAYS use current real values
+        // This ensures YTD/1Y/3Y/5Y/All match the "North Star" metrics and are accurate
+        const isToday = endDate.toDateString() === today.toDateString();
+        const hasPriceData = Object.keys(priceData).length > 0;
+        const tickerMappings = loadTickerMappings();
+
+        // SCENARIO 1: Current Period (YTD, 1Y, 3Y, 5Y, All, or Custom ending today)
+        // Benefit: We use the actual current portfolio value which is most accurate
+        if (isToday) {
+            // Calculate Adjusted Cost Basis for true "Holding Gain" relative to start date
+            let adjustedCostBasis = calculations.totalCost; // Fallback to original cost
+
+            if (hasPriceData && startDate.getFullYear() > 1900) {
+                adjustedCostBasis = calculateAdjustedCostBasis(
+                    parsedData.portfolioPositions,
+                    parsedData.transactions,
+                    priceData,
+                    tickerMappings,
+                    exchangeRates,
+                    startDate
+                );
+            }
+
+            return {
+                portfolioValue: calculations.totalValue,
+                costBasis: adjustedCostBasis,
+                gain: (calculations.totalValue - calculations.cashValue) - adjustedCostBasis,
+                gainPercent: adjustedCostBasis > 0 ? (((calculations.totalValue - calculations.cashValue) - adjustedCostBasis) / adjustedCostBasis) * 100 : 0,
+                cashBalance: calculations.cashValue,
+            };
+        }
+
+        // SCENARIO 2: Historical Period (Custom Range in Past)
+
+        // 1. Determine Value & Cost Basis:
+        // We calculate strictly based on Holdings at End Date to ensure "Holding Gain" excludes Cash.
+        // This is more accurate than Chart Data which simulates Total Value (inc. Cash).
+
+        const sortedTransactions = [...parsedData.transactions].sort(
+            (a, b) => a.date.getTime() - b.date.getTime()
+        );
+        const holdingsAtEnd = getHoldingsAtDate(sortedTransactions, endDate);
+
+        // Convert to PortfolioPosition[] for helper
+        const historicalPositions: PortfolioPosition[] = Object.entries(holdingsAtEnd).map(([isin, h]) => ({
+            isin,
+            quantity: h.quantity,
+            product: h.product || '',
+            lastPrice: 0,
+            value: 0,
+            valueEur: 0,
+            valueCurrency: '' // Helper will fallback to transactions or defaults
+        }));
+
+        // Calculate Securities Value at End Date (Strictly Holdings, No Cash)
+        const portfolioValue = calculatePortfolioValueAtDate(
+            holdingsAtEnd,
+            priceData,
+            tickerMappings,
+            exchangeRates,
+            endDate
+        );
+
+        let adjustedCostBasis = 0;
+        if (hasPriceData && startDate.getFullYear() > 1900) {
+            adjustedCostBasis = calculateAdjustedCostBasis(
+                historicalPositions,
+                parsedData.transactions,
+                priceData,
+                tickerMappings,
+                exchangeRates,
+                startDate
+            );
+        } else {
+            // Fallback: Use standard cost basis at end date (Original Cost)
+            adjustedCostBasis = getTotalCostBasisAtDate(sortedTransactions, endDate);
+        }
+
+        // Safety fallback if calculation yielded 0 cost but value exists
+        if (adjustedCostBasis === 0 && portfolioValue > 0) {
+            adjustedCostBasis = getTotalCostBasisAtDate(sortedTransactions, endDate);
+        }
+
+        return {
+            portfolioValue,
+            costBasis: adjustedCostBasis,
+            gain: portfolioValue - adjustedCostBasis,
+            gainPercent: adjustedCostBasis > 0 ? ((portfolioValue - adjustedCostBasis) / adjustedCostBasis) * 100 : 0,
+            cashBalance: calculations.cashValue, // Historical cash difficult, keep current
+        };
+
+    }, [timePeriod, customDateRange, priceData, calculations, parsedData, exchangeRates, loadTickerMappings, filteredChartData]); */
+
+    // Calculate period-filtered dividends and fees LISTS for tables
+    const periodFilteredDividendsList = useMemo(() => {
+        if (timePeriod === 'ALL' && !customDateRange) {
+            return calculations.dividends;
+        }
+
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return calculations.dividends;
+                }
+                break;
+            default:
+                return calculations.dividends;
+        }
+
+        return calculations.dividends.filter(d => d.date >= startDate && d.date <= endDate);
+    }, [timePeriod, customDateRange, calculations.dividends]);
+
+    const periodFilteredFeesList = useMemo(() => {
+        if (timePeriod === 'ALL' && !customDateRange) {
+            return calculations.fees;
+        }
+
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return calculations.fees;
+                }
+                break;
+            default:
+                return calculations.fees;
+        }
+
+        return calculations.fees.filter(f => f.date >= startDate && f.date <= endDate);
+    }, [timePeriod, customDateRange, calculations.fees]);
+
+    const periodFilteredTransactions = useMemo(() => {
+        if (timePeriod === 'ALL' && !customDateRange) {
+            return parsedData.transactions;
+        }
+
+        const today = getToday();
+        let startDate: Date;
+        let endDate: Date = today;
+
+        switch (timePeriod) {
+            case 'YTD':
+                startDate = getStartOfYear(today);
+                break;
+            case '1Y':
+                startDate = subtractYears(today, 1);
+                break;
+            case '3Y':
+                startDate = subtractYears(today, 3);
+                break;
+            case '5Y':
+                startDate = subtractYears(today, 5);
+                break;
+            case 'CUSTOM':
+                if (customDateRange) {
+                    startDate = customDateRange.startDate;
+                    endDate = customDateRange.endDate;
+                } else {
+                    return parsedData.transactions;
+                }
+                break;
+            default:
+                return parsedData.transactions;
+        }
+
+        return parsedData.transactions.filter(t => t.date >= startDate && t.date <= endDate);
+    }, [timePeriod, customDateRange, parsedData.transactions]);
+
     return (
         <div className="min-h-screen">
             {/* Header */}
@@ -499,7 +915,13 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <TimePeriodSelector selected={timePeriod} onChange={setTimePeriod} />
+                        <TimePeriodSelector
+                            selected={timePeriod}
+                            onChange={setTimePeriod}
+                            customRange={customDateRange}
+                            onCustomRangeChange={setCustomDateRange}
+                            maxDate={getToday()}
+                        />
                         <SettingsButton
                             detectedIsins={calculations.positionsWithGains.map(p => ({
                                 isin: p.isin,
@@ -531,6 +953,7 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
                 {/* Tier 1: North Star Hero */}
                 <NorthStarMetrics
                     totalValue={calculations.totalValue}
+                    totalCost={calculations.totalCost}
                     totalGain={calculations.totalGain}
                     totalGainPercent={calculations.totalGainPercent}
                     twr={filteredMetrics.twr}
@@ -538,20 +961,20 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
 
                 {/* Tier 2: Secondary Metrics */}
                 <PortfolioOverview
-                    totalValue={calculations.totalValue}
-                    totalCost={calculations.totalCost}
-                    totalGain={calculations.totalGain}
-                    totalGainPercent={calculations.totalGainPercent}
                     cashBalance={calculations.cashValue}
-                    dividendsYTD={calculations.dividendsYTD}
-                    feesYTD={calculations.feesYTD}
+                    dividendsYTD={periodFilteredDividends}
+                    feesYTD={periodFilteredFees}
+                    timePeriod={timePeriod}
+                    operationalGainLoss={periodFilteredOperationalGains}
+                    operationalDividends={periodFilteredDividends}
                 />
 
                 {/* Tabs for different views */}
                 <Tabs defaultValue="performance" className="space-y-4">
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="performance">Performance</TabsTrigger>
                         <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                        <TabsTrigger value="operations">Operations</TabsTrigger>
                         <TabsTrigger value="allocation">Allocation</TabsTrigger>
                         <TabsTrigger value="income">Income & Costs</TabsTrigger>
                     </TabsList>
@@ -576,6 +999,9 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
                                 </Button>
                             </div>
                         </div>
+                        {/* Yearly Performance Grid */}
+                        <YearlyPerformanceGrid yearlyReturns={yearlyReturns} loading={yearlyLoading} />
+
                         <PerformanceChart data={filteredChartData} showBenchmarks={showBenchmarks} showDeposits={showDeposits} />
                         <PerformanceMetrics
                             twr={filteredMetrics.twr}
@@ -637,6 +1063,14 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
                         <PositionsTable positions={calculations.positionsWithGains} sparklineData={sparklineData} />
                     </TabsContent>
 
+                    <TabsContent value="operations" className="space-y-6">
+                        <h2 className="text-2xl font-bold">Trading Operations</h2>
+                        <OperationsTable
+                            transactions={periodFilteredTransactions}
+                            timePeriodLabel={getTimePeriodLabel(timePeriod)}
+                        />
+                    </TabsContent>
+
                     <TabsContent value="allocation" className="space-y-6">
                         <h2 className="text-2xl font-bold">Asset Allocation</h2>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -660,12 +1094,12 @@ export function Dashboard({ files, onReset, isDarkMode, onToggleDarkMode, lastUp
                     <TabsContent value="income" className="space-y-6">
                         <h2 className="text-2xl font-bold">Income & Costs</h2>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <DividendsTable dividends={calculations.dividends} />
-                            <FeesTable fees={calculations.fees} />
+                            <DividendsTable dividends={periodFilteredDividendsList} convertToEur={convertHistorical} />
+                            <FeesTable fees={periodFilteredFeesList} />
                         </div>
                     </TabsContent>
                 </Tabs>
             </main>
-        </div>
+        </div >
     );
 }
